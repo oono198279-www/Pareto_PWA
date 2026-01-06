@@ -290,7 +290,7 @@ openLabelN.onclick = ()=> openInNewTab(previewLabelN.src);
     bd.classList.remove('is-open');
     bd.setAttribute('aria-hidden','true');
   }
-  (function bindCopyHelp(){
+  function bindCopyHelp(){
     const ids = ['copyHintChart','copyHintTable','copyHintLabelN','copyHintLabelThreshold','copyHintLabel100'];
     ids.forEach(id=>{
       const el = document.getElementById(id);
@@ -305,7 +305,15 @@ openLabelN.onclick = ()=> openInNewTab(previewLabelN.src);
       bd.addEventListener('click', (e)=>{ if(e.target === bd) closeCopyHelp(); });
     }
     document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeCopyHelp(); });
-  })();
+  }
+
+  // iOS PWA では Esc が使えないので、「閉じる」ボタンが確実に効くように
+  // DOM 構築後にイベントをバインドする
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', bindCopyHelp, { once:true });
+  }else{
+    bindCopyHelp();
+  }
 
 run.onclick = () => {
     msg.className = 'err';
