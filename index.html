@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>QC パレート図 PNG 生成</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  body { font-family: "Meiryo","Yu Gothic","Segoe UI",sans-serif; margin: 16px; }
+  h1 { font-size: 18px; margin-bottom: 8px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .panel { border: 1px solid #ccc; padding: 12px; border-radius: 6px; }
+  textarea { width: 420px; height: 220px; }
+  label { font-size: 13px; }
+  button { padding: 6px 12px; }
+  .err { color: #c00; margin-top: 6px; white-space: pre-line; }
+  .ok  { color: #060; margin-top: 6px; }
+  canvas { display: none; }
+  .hint { font-size: 12px; color: #555; margin-top: 6px; line-height: 1.4; }
+  input[type="text"]{ width: 220px; }
+
+  .previewWrap{ display:flex; gap:16px; flex-wrap:wrap; margin-top:8px; }
+  .previewBox{ border:1px solid #ccc; border-radius:6px; padding:8px; background:#fafafa; }
+  .previewBox h3{ font-size:12px; margin:0 0 6px 0; color:#555; font-weight:600; }
+  .previewBox img{ max-width:520px; height:auto; display:block; background:#fff; }
+.labelGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px}
+.labelItem{border:1px dashed #cfd6dd;border-radius:10px;padding:10px;background:#fff}
+.labelName{font-size:13px;color:#555;margin-bottom:6px}
+.labelItem img{max-width:100%;height:auto;display:block;background:transparent}
+  .previewActions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  .smallbtn{ padding:4px 10px; font-size:12px; }
+  .muted{ font-size:12px; color:#555; margin-top:6px; line-height:1.4; }
+
+  /* --- Layout upgrade: ①② side-by-side, ③ full width (no-scroll friendly) --- */
+  .layoutGrid{
+    display:grid;
+    grid-template-columns: 1.4fr 1fr; /* ① wider than ② */
+    gap:16px;
+    align-items:start;
+  }
+  .fullRow{ grid-column: 1 / -1; }
+  /* tighten panels a bit */
+  .panel{ padding:12px 14px; }
+  textarea{ min-height: 200px; } /* reduce to keep ③ visible */
+  @media (max-width: 620px){
+    .layoutGrid{ grid-template-columns: 1fr; }
+    textarea{ min-height: 220px; }
+  }
+
+  /* --- Make Generate button prominent --- */
+  #run{
+    background:#ffeb3b;
+    color:#111;
+    border:1px solid #d4c200;
+    border-radius:10px;
+    padding:10px 18px;
+    font-weight:700;
+    font-size:16px;
+    cursor:pointer;
+    box-shadow:0 2px 6px rgba(0,0,0,.18);
+  }
+  #run:hover{ filter:brightness(1.05); }
+  #run:active{ transform:translateY(1px); box-shadow:0 1px 3px rgba(0,0,0,.18); }
+
+/* howto */
+details.howto { margin-top: 10px; background:#fff; border:1px dashed #cfcfcf; border-radius:10px; padding:10px 12px; }
+details.howto > summary { cursor:pointer; font-weight:800; }
+.howto-body { margin-top:10px; }
+.howto-body h4 { margin: 10px 0 6px; }
+.howto-grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+.howto-grid.one { grid-template-columns: 1fr; max-width: 520px; }
+.howto-grid img { width:100%; height:auto; border:1px solid #e5e5e5; border-radius:8px; background:#fafafa; }
+.howto-grid figcaption { font-size:12px; color:#666; margin-top:6px; }
+.howto-note { font-size:12px; color:#666; margin-top:10px; }
+
+/* modal (copy help) */
+.modal-backdrop{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); z-index:9999; padding:18px; }
+.modal-backdrop.is-open{ display:flex; }
+.modal{ width:min(680px, 100%); background:#fff; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.25); overflow:hidden; }
+.modal-header{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border-bottom:1px solid #eee; }
+.modal-header h3{ margin:0; font-size:16px; }
+.modal-close{ border:1px solid #ccc; background:#f7f7f7; border-radius:10px; padding:6px 10px; cursor:pointer; }
+.modal-body{ padding:12px 14px; font-size:14px; line-height:1.55; }
+.modal-body code{ background:#f6f6f6; padding:1px 4px; border-radius:6px; }
+.modal-body ul{ margin:8px 0 0 18px; }
+</style>
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+
+<h1>QC パレート図 PNG 生成<br/>（Windows / HTML1枚）</h1>
+
+<div class="row">
+  <div class="layoutGrid">
+<div class="panel">
+    <label>① Excelからコピぺ<br/>（縦2列：項目名 / 個数）</label><br/>
+    <textarea id="input"></textarea>
+
+      <details class="howto">
+        <summary>使い方（画像つき）</summary>
+        <div class="howto-body">
+          <h4>Excelから貼り付け（おすすめ）</h4>
+          <ol>
+            <li>Excelで「項目名」と「個数」の2列を選択してコピー</li>
+            <li>この入力欄に貼り付け（タブ区切りのままOK）</li>
+          </ol>
+          <div class="howto-grid">
+            <figure>
+              <img src="howto_excel_select.png" alt="Excelで2列を選択してコピー">
+              <figcaption>① Excelで2列を選択してコピー</figcaption>
+            </figure>
+            <figure>
+              <img src="howto_tsv_paste.png" alt="タブ区切りで貼り付け">
+              <figcaption>② そのまま貼り付け（TSV）</figcaption>
+            </figure>
+          </div>
+
+          <h4>直接入力（カンマ区切り）</h4>
+          <p>1行につき <b>項目名,個数</b> の形で入力します（例：<code>カテゴリ①,10</code>）。</p>
+          <div class="howto-grid one">
+            <figure>
+              <img src="howto_comma_input.png" alt="カンマ区切りで直接入力">
+              <figcaption>③ 直接入力はカンマ区切り</figcaption>
+            </figure>
+          </div>
+
+          <p class="howto-note">※ 数値側に「,」「個」「%」などが混ざるとエラーになります（例：<code>1,000</code> や <code>10個</code> はNG）。</p>
+        </div>
+      </details>
+    <div class="hint">
+      ・左列：項目名　　右列：個数（数値のみ）<br/>
+      ・Excelから貼り付け：タブ区切り（TSV）<br/>
+      ・直接入力：<b>項目名,個数</b>（カンマ区切り）でもOK<br/>
+      ・Excel書式：標準 / G（3桁カンマや「個」「%」は入れない）<br/>
+    </div>
+  </div>
+
+  <div class="panel">
+    <label>② 設定</label><br/>
+    項目数 N：
+    <input type="number" id="nItems" min="2" max="20" value="5" /><br/><br/>
+
+    出力比率：
+    <select id="ratio">
+      <option value="16:9" selected>16 : 9</option>
+      <option value="4:3">4 : 3</option>
+    </select><br/><br/>
+
+    グラフタイトル（任意）：
+    <input type="text" id="title" placeholder="例）グラフタイトル" /><br/><br/>
+
+    赤強調閾値（累積%）：
+    <input type="number" id="th" min="50" max="100" step="1" value="80" /> %<br/><br/>
+
+    ダウンロード保存： <label style="font-size:13px;"><input type="checkbox" id="downloadAlso" /> PNGをダウンロードして保存する</label><br/>
+    n表示： <label style="font-size:13px;"><input type="checkbox" id="showNOnChart" checked /> パレート図右上に n=合計個数 を表示する</label><br/><br/>
+    <button id="run">生成</button>
+    <div id="msg" class="err"></div>
+</div>
+  </div>
+</div>
+
+
+<div class="panel fullRow" style="margin-top:16px;">
+  <label>③ 生成結果（ここからコピーできます）</label>
+  <div class="previewWrap">
+    <div class="previewBox">
+      <h3>パレート図</h3>
+      <img id="previewChart" alt="パレート図プレビュー" />
+      <div class="previewActions">
+        <button class="smallbtn" id="openChart">新しいタブで開く</button>
+        <button class="smallbtn" id="copyHintChart">コピー手順</button>
+      </div>
+    </div>
+    <div class="previewBox">
+      <h3>一覧表（透過PNG）</h3>
+      <img id="previewTable" alt="一覧表プレビュー" />
+      <div class="previewActions">
+        <button class="smallbtn" id="openTable">新しいタブで開く</button>
+        <button class="smallbtn" id="copyHintTable">コピー手順</button>
+      </div>
+    </div>
+  </div>
+  <div class="muted">
+    ・画像をExcelのシート上/PowerPointのスライド上にドラッグしてください<br/>
+  </div>
+
+  <div class="previewBox">
+    <h3>補助ラベル（透過PNG）</h3>
+    <div class="labelGrid">
+      <div class="labelItem">
+        <div class="labelName">n 表示</div>
+        <img id="previewLabelN" alt="n表示プレビュー" />
+        <div class="btnRow">
+          <button class="mini" id="openLabelN">新しいタブで開く</button>
+          <button class="mini" id="copyHintLabelN">コピー手順</button>
+        </div>
+        <a id="labelDlN" style="display:none"></a>
+      </div>
+      <div class="labelItem">
+        <div class="labelName">閾値の累積%</div>
+        <img id="previewLabelThr" alt="閾値累積%プレビュー" />
+        <div class="btnRow">
+          <button class="mini" id="openLabelThr">新しいタブで開く</button>
+          <button class="mini" id="copyHintLabelThr">コピー手順</button>
+        </div>
+        <a id="labelDlThr" style="display:none"></a>
+      </div>
+      <div class="labelItem">
+        <div class="labelName">100%</div>
+        <img id="previewLabel100" alt="100%プレビュー" />
+        <div class="btnRow">
+          <button class="mini" id="openLabel100">新しいタブで開く</button>
+          <button class="mini" id="copyHintLabel100">コピー手順</button>
+        </div>
+        <a id="labelDl100" style="display:none"></a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<canvas id="chart"></canvas>
+<canvas id="table"></canvas>
+
+<script>
+(function(){
+  const input = document.getElementById('input');
+  const msg = document.getElementById('msg');
+  const run = document.getElementById('run');
+  const chartCv = document.getElementById('chart');
+  const tableCv = document.getElementById('table');
+  const previewChart = document.getElementById('previewChart');
+  const previewTable = document.getElementById('previewTable');
+  const openChart = document.getElementById('openChart');
+  const openTable = document.getElementById('openTable');
+  const copyHintChart = document.getElementById('copyHintChart');
+  const copyHintTable = document.getElementById('copyHintTable');
+
+
+
+  
+  const previewLabelN = document.getElementById('previewLabelN');
+  const previewLabelThr = document.getElementById('previewLabelThr');
+  const previewLabel100 = document.getElementById('previewLabel100');
+
+  const openLabelN = document.getElementById('openLabelN');
+  const openLabelThr = document.getElementById('openLabelThr');
+  const openLabel100 = document.getElementById('openLabel100');
+
+  const labelDlN = document.getElementById('labelDlN');
+  const labelDlThr = document.getElementById('labelDlThr');
+  const labelDl100 = document.getElementById('labelDl100');
+  const copyHintLabelN = document.getElementById('copyHintLabelN');
+  const copyHintLabelThr = document.getElementById('copyHintLabelThr');
+  const copyHintLabel100 = document.getElementById('copyHintLabel100');
+// プレビュー操作（iPhone等でも見られるが、コピーは主にWindows想定）
+  function openInNewTab(dataUrl){
+    if (!dataUrl) return;
+    const w = window.open();
+    if (!w) { alert('ポップアップがブロックされました。ブラウザ設定をご確認ください。'); return; }
+    w.document.write('<title>PNG Preview</title><img src="'+dataUrl+'" style="max-width:100%;height:auto;"/>');
+    w.document.close();
+  }
+  function showCopyHint(){
+    alert('【コピー方法】\n1) 画像を右クリック →「画像をコピー」\n2) Excel/PowerPointで Ctrl+V\n\n※右クリックに「画像をコピー」が無い場合：\n・「新しいタブで開く」→その画像を右クリック\n・またはダウンロード保存にチェックして保存→貼り付け');
+  }
+  openChart.onclick = ()=> openInNewTab(previewChart.src);
+  openTable.onclick = ()=> openInNewTab(previewTable.src);
+
+openLabelN.onclick = ()=> openInNewTab(previewLabelN.src);
+  openLabelThr.onclick = ()=> openInNewTab(previewLabelThr.src);
+  openLabel100.onclick = ()=> openInNewTab(previewLabel100.src);
+
+  
+  // コピー手順（モーダル表示）
+  function openCopyHelp(){
+    const bd = document.getElementById('copyHelpBackdrop');
+    if(!bd) return;
+    bd.classList.add('is-open');
+    bd.setAttribute('aria-hidden','false');
+    // フォーカスを閉じるボタンへ
+    const btn = document.getElementById('copyHelpClose');
+    if(btn) btn.focus();
+  }
+  function closeCopyHelp(){
+    const bd = document.getElementById('copyHelpBackdrop');
+    if(!bd) return;
+    bd.classList.remove('is-open');
+    bd.setAttribute('aria-hidden','true');
+  }
+  (function bindCopyHelp(){
+    const ids = ['copyHintChart','copyHintTable','copyHintLabelN','copyHintLabelThreshold','copyHintLabel100'];
+    ids.forEach(id=>{
+      const el = document.getElementById(id);
+      if(el){
+        el.addEventListener('click', (e)=>{ e.preventDefault(); openCopyHelp(); });
+      }
+    });
+    const bd = document.getElementById('copyHelpBackdrop');
+    const closeBtn = document.getElementById('copyHelpClose');
+    if(closeBtn) closeBtn.addEventListener('click', closeCopyHelp);
+    if(bd){
+      bd.addEventListener('click', (e)=>{ if(e.target === bd) closeCopyHelp(); });
+    }
+    document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeCopyHelp(); });
+  })();
+
+run.onclick = () => {
+    msg.className = 'err';
+    msg.textContent = '';
+
+    try {
+      const rows = parseInput(input.value);
+      const N = parseInt(document.getElementById('nItems').value, 10);
+      const th = parseInt(document.getElementById('th').value, 10);
+      const title = document.getElementById('title').value.trim();
+
+      if (!Number.isInteger(N) || N < 2) throw '項目数 N が不正です。';
+      if (!Number.isFinite(th) || th < 50 || th > 100) throw '赤強調しきい値が不正です（50〜100）。';
+
+      // 検証（縦2列のみ）
+      rows.forEach((r,i)=>{
+        if (r.length !== 2) throw '入力は「縦2列」のみ対応です。';
+        if (!isPureNumber(r[1])) throw `数値エラー（${i+1}行目）。Excel書式を「標準」にしてください。`;
+      });
+
+      // データ整形
+      let data = rows.map(r => ({ name: r[0], val: Number(r[1]) }));
+      if (data.length < N) throw `項目数不足（貼付 ${data.length} 件 / 設定 ${N} 件）。`;
+
+      // 降順
+      data.sort((a,b)=>b.val-a.val);
+
+      // 「その他」集約（仕様どおり）
+      let view = [];
+      if (data.length > N) {
+        const head = data.slice(0, N-1);
+        const rest = data.slice(N-1);
+        const sum = rest.reduce((s,x)=>s+x.val,0);
+        view = head.concat([{ name:'その他', val: sum }]);
+      } else {
+        view = data.slice();
+      }
+
+      // 累積比率
+      const total = view.reduce((s,x)=>s+x.val,0);
+      let acc = 0;
+      view = view.map((x,i)=>{
+        acc += x.val;
+        let pct = acc / total * 100;
+        if (i === view.length-1) pct = 100; // 丸め誤差吸収
+        return {...x, accPct: pct};
+      });
+
+      // 出力サイズ（設計どおり：固定）
+      const ratio = document.getElementById('ratio').value;
+      const size = ratio === '16:9' ? {w:1920,h:1080} : {w:1600,h:1200};
+
+      drawParetoQC(chartCv, view, size, { title, total, thresholdPct: th });
+      // 一覧表の赤強調もしきい値（累積%）に追従
+      drawTable(tableCv, view, th);
+
+      const chartURL = chartCv.toDataURL('image/png');
+      const tableURL = tableCv.toDataURL('image/png');
+      previewChart.src = chartURL;
+      previewTable.src = tableURL;
+
+      
+        // --- 補助ラベル（透過PNG） ---
+    const totalForLabel = view.reduce((s, d) => s + d.val, 0);
+
+    // 「赤強調しきい値(累積%)」を超える最初の点（=赤ゾーンの最後の点）をラベル化
+    const thRaw = Number(document.getElementById('th').value);
+    const thPct = Number.isFinite(thRaw) ? thRaw : 80;
+    const th01 = Math.max(0, Math.min(100, thPct)) / 100;
+
+    let redLastIdx = view.findIndex(d => d.accPct >= thPct - 1e-12);
+    if (redLastIdx === -1) redLastIdx = Math.max(0, view.length - 1);
+
+    const thrPctForLabel = view[redLastIdx]?.accPct ?? 100; // 0〜100（%）
+    const thrLabelText = thrPctForLabel.toFixed(1) + '%';
+
+    previewLabelN.src   = makeTextPng(`n = ${formatInt(totalForLabel)}個`, { fontSize: 18, align: 'right' });
+    previewLabelThr.src = makeTextPng(thrLabelText, { fontSize: 18, color: '#d30000' });
+    previewLabel100.src = makeTextPng('100%', { fontSize: 18 });
+
+    // ダウンロード用リンク（存在する場合のみセット）
+    if (labelDlN)   { labelDlN.href = previewLabelN.src;     labelDlN.download = 'label_n.png'; }
+    if (labelDlThr) { labelDlThr.href = previewLabelThr.src; labelDlThr.download = 'label_threshold.png'; }
+    if (labelDl100) { labelDl100.href = previewLabel100.src; labelDl100.download = 'label_100.png'; }
+
+const also = document.getElementById('downloadAlso').checked;
+      if (also){
+        const ts = timestamp();
+        download(chartCv, `pareto_${ts}.png`);
+        download(tableCv, `table_${ts}.png`);
+      }
+
+      msg.className = 'ok';
+      msg.textContent = also ? '生成完了：プレビュー表示＋PNGをダウンロード保存しました。' : '生成完了：プレビュー表示しました（右クリックでコピーできます）。';
+
+    } catch(e) {
+      msg.textContent = e.toString();
+    }
+  };
+
+  // -------- utils --------
+  function parseInput(t){
+    const s = (t || '').trim();
+    if (!s) throw '入力が空です。Excelから2列をコピーして貼り付けるか、「項目名,個数」で入力してください。';
+
+    return s
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => {
+        // 1) TSV (Excel貼り付け)
+        if (line.includes('\t')) {
+          return line.split('\t');
+        }
+
+        // 2) カンマ区切り（直接入力）
+        if (line.includes(',')) {
+          const idx = line.indexOf(',');
+          const left = line.slice(0, idx).trim();
+          const right = line.slice(idx + 1).trim();
+          return [left, right];
+        }
+
+        // 3) おまけ：空白区切り（末尾が数値のとき）
+        //    例) 「項目名 123」 -> ["項目名", "123"]
+        const parts = line.split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) {
+          const last = parts[parts.length - 1];
+          const name = parts.slice(0, -1).join(' ');
+          return [name, last];
+        }
+
+        return [line];
+      });
+  }
+
+  // 数値だけ（カンマ/単位/空白/全角はNGにする）
+  function isPureNumber(v){
+    const s = String(v).trim();
+    return /^[0-9]+(\.[0-9]+)?$/.test(s);
+  }
+
+  function timestamp(){
+    const d=new Date();
+    const p=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
+  }
+
+  function download(cv, name){
+    const a=document.createElement('a');
+    a.href=cv.toDataURL('image/png');
+    a.download=name;
+    a.click();
+  }
+
+  // -------- drawing (QC寄せ) --------
+  function drawParetoQC(cv, data, size, meta){
+    cv.width=size.w; cv.height=size.h;
+    const g=cv.getContext('2d');
+
+    // 背景（白）
+    g.fillStyle='#fff';
+    g.fillRect(0,0,cv.width,cv.height);
+
+    // 余白
+    const HEADER_H = 80; // タイトル/n を置く帯
+    const pad = { l: 50, r: 70, t: 70 + HEADER_H, b: 90 };
+    const W = cv.width - pad.l - pad.r;
+    const H = cv.height - pad.t - pad.b;
+
+    // 横軸ラベル無し（設計どおり）
+    // グリッド（水平のみ・薄い灰）
+    g.strokeStyle = '#d9d9d9';
+    g.lineWidth = 2;
+    const gridN = 6; // 0%〜100% っぽい本数
+    for (let i=0;i<=gridN;i++){
+      const y = pad.t + (H/gridN)*i;
+      g.beginPath();
+      g.moveTo(pad.l, y);
+      g.lineTo(pad.l + W, y);
+      g.stroke();
+    }
+
+    // タイトル
+    if (meta.title){
+      g.fillStyle = '#555';
+      g.font = '32px sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(meta.title, pad.l + W/2, HEADER_H * 0.45);
+    }
+
+    // 右上 n= 合計個数（表示/非表示トグル）
+    const showNOnChart = document.getElementById('showNOnChart')?.checked ?? true;
+    if (showNOnChart) {
+      g.fillStyle = '#333';
+      g.font = '24px sans-serif';
+      g.textAlign = 'right';
+      g.textBaseline = 'alphabetic';
+      g.fillText(`n = ${formatInt(meta.total)}個`, pad.l + W, HEADER_H * 0.55);
+    }
+
+    // 右上 100%
+    g.fillStyle = '#666';
+    g.font = '20px sans-serif';
+    g.textAlign = 'right';
+
+    // 棒（隙間なし）
+    const n = data.length;
+    const barW = W / n;
+    const yMax = meta.total;
+
+    // 赤強調の範囲（累積が threshold に到達するまで）
+    const thr = meta.thresholdPct;
+    let redLastIdx = -1;
+    for (let i=0;i<n;i++){
+      if (data[i].accPct >= thr){
+        redLastIdx = i;
+        break;
+      }
+    }
+    if (redLastIdx < 0) redLastIdx = n-1;
+
+    // 棒描画＋数値ラベル
+    for (let i=0;i<n;i++){
+      const d = data[i];
+      const x = pad.l + barW*i;
+      const bh = (d.val / yMax) * H;
+      const y = pad.t + (H - bh);
+
+      // 色：赤 or 灰
+      const isRed = i <= redLastIdx;
+      g.fillStyle = isRed ? '#ff0000' : '#7f7f7f';
+      g.fillRect(x, y, barW, bh);
+
+      // 枠線：黒（Excelっぽく）
+      g.strokeStyle = '#000';
+      g.lineWidth = 2;
+      g.strokeRect(x, y, barW, bh);
+
+      // 個数ラベル（棒の上）
+      g.font = isRed ? '24px sans-serif' : '22px sans-serif';
+      g.fillStyle = isRed ? '#d40000' : '#555';
+      g.textAlign = 'center';
+      g.textBaseline = 'bottom';}
+
+    // 累積折れ線（黄色・太線・丸）
+    g.strokeStyle = '#f2b400';
+    g.lineWidth = 6;
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+
+    // 始点を左下からスタート（見た目寄せ）
+    const startX = pad.l;
+    const startY = pad.t + H;
+
+    g.beginPath();
+    g.moveTo(startX, startY);
+
+    const pts = data.map((d,i)=>{
+      // 棒の右肩（右端）に合わせる
+      const cx = pad.l + barW*(i+1);
+      const cy = pad.t + H*(1 - d.accPct/100);
+      return {x:cx, y:cy, pct:d.accPct};
+    });
+
+    pts.forEach(p=>g.lineTo(p.x, p.y));
+    g.stroke();
+
+    // マーカー
+    for (let i=0;i<pts.length;i++){
+      const p = pts[i];
+      g.fillStyle = '#f2b400';
+      g.beginPath();
+      g.arc(p.x, p.y, 8, 0, Math.PI*2);
+      g.fill();
+}
+
+    // 凡例（下中央）
+    const legendY = pad.t + H + 55;
+    const cx = pad.l + W/2;
+
+    // 不良数（赤の四角）
+    g.fillStyle = '#ff0000';
+    g.strokeStyle = '#000';
+    g.lineWidth = 2;
+    g.fillRect(cx - 140, legendY - 14, 40, 20);
+    g.strokeRect(cx - 140, legendY - 14, 40, 20);
+    g.fillStyle = '#666';
+    g.font = '24px sans-serif';
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    g.fillText('不良数', cx - 90, legendY - 4);
+
+    // 不良率（黄色の線＋丸）
+    g.strokeStyle = '#f2b400';
+    g.lineWidth = 6;
+    g.beginPath();
+    g.moveTo(cx + 40, legendY - 4);
+    g.lineTo(cx + 110, legendY - 4);
+    g.stroke();
+    g.fillStyle = '#f2b400';
+    g.beginPath();
+    g.arc(cx + 75, legendY - 4, 8, 0, Math.PI*2);
+    g.fill();
+    g.fillStyle = '#666';
+    g.font = '24px sans-serif';
+    g.textAlign = 'left';
+    g.fillText('不良率', cx + 125, legendY - 4);
+  }
+
+  // 「太字」は環境依存なので、実質はフォントサイズ差で視認性を上げる
+  function demonstratedFontWeight(_){ return '22px sans-serif'; }
+
+  function drawTable(cv, data, thr){
+    // 透過（clearRect）
+    const g = cv.getContext('2d');
+  
+    // 文字設定（測定と描画で揃える）
+    const fontBody = '20px sans-serif';
+    const fontHeader = 'bold 20px sans-serif';
+  
+    const rowH = 42;
+    const padX = 14;
+  
+    // 表示文字を事前生成（幅計算用）
+    const rows = data.map(d => ({
+      name: d.name,
+      valText: formatInt(d.val) + '個',         // #,##0個
+      pctText: d.accPct.toFixed(1) + '%'
+    }));
+    // 赤強調：累積%がしきい値(thr)に到達する行まで（到達行も含む）
+    const cutoffIndex = (()=>{
+      const idx = data.findIndex(d => d.accPct >= thr);
+      return idx >= 0 ? idx : data.length-1;
+    })();
+  
+    // --- 列幅の自動調整 ---
+    // 「項目名」列：見出しと全行の文字幅から最大をとる
+    g.font = fontBody;
+    const nameMax = Math.max(
+      textW(g, '項目名'),
+      ...rows.map(r => textW(g, r.name))
+    );
+  
+    // 「個数」「累積比率」列：固定でもいいが、念のため最大幅から決める
+    const valMax = Math.max(
+      textW(g, '個数'),
+      ...rows.map(r => textW(g, r.valText))
+    );
+    const pctMax = Math.max(
+      textW(g, '累積比率'),
+      ...rows.map(r => textW(g, r.pctText))
+    );
+  
+    // 最低幅（見た目の余裕）
+    const colName = Math.max(220, Math.ceil(nameMax) + padX*2);
+    const colVal  = Math.max(140, Math.ceil(valMax)  + padX*2);
+    const colPct  = Math.max(180, Math.ceil(pctMax)  + padX*2);
+  
+    const tableW = colName + colVal + colPct;
+    const tableH = rowH * (rows.length + 1);
+  
+    cv.width = tableW;
+    cv.height = tableH;
+  
+    // 透過背景
+    g.clearRect(0,0,cv.width,cv.height);
+  
+    // 罫線色（薄グレー）
+    const grid = '#cfcfcf';
+  
+    // --- ヘッダー ---
+    // ヘッダー下線
+    g.strokeStyle = grid;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(0, rowH);
+    g.lineTo(tableW, rowH);
+    g.stroke();
+  
+  
+    g.fillStyle = '#111';
+    // 見出し文字
+    g.fillStyle = '#000';
+    g.font = fontHeader;
+    g.textBaseline = 'middle';
+  
+    // 「項目名」左寄せ
+    g.textAlign = 'left';
+    g.fillText('項目名', padX, rowH/2);
+  
+    // 「個数」「累積比率」は中央寄せ（好みで右寄せでもOK）
+    g.textAlign = 'center';
+    g.fillText('個数', colName + colVal/2, rowH/2);
+    g.fillText('累積比率', colName + colVal + colPct/2, rowH/2);
+  
+    // --- 本文 ---
+    g.font = fontBody;
+    g.fillStyle = '#000';
+    g.textAlign = 'left';
+  
+    for(let i=0;i<rows.length;i++){
+      const y = rowH*(i+1) + rowH/2;
+  
+      // 行の横線（薄く）
+      g.strokeStyle = '#e0e0e0';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(0, rowH*(i+1));
+      g.lineTo(tableW, rowH*(i+1));
+      g.stroke();
+  
+      const isRed = (i <= cutoffIndex);
+      g.fillStyle = isRed ? '#d60000' : '#222';
+
+      // 項目名：左寄せ
+      g.textAlign = 'left';
+      g.fillText(rows[i].name, padX, y);
+      
+      // 個数：右揃え
+      g.textAlign = 'right';
+      g.fillText(rows[i].valText, colName + colVal - padX, y);
+      
+      // 累積比率：右揃え
+      g.textAlign = 'right';
+      g.fillText(rows[i].pctText, colName + colVal + colPct - padX, y);
+    }
+  }
+  
+  // Canvasで文字幅を測るヘルパー
+  function textW(ctx, s){
+    return ctx.measureText(String(s)).width;
+  }
+
+
+  
+  function makeTextPng(text, opts={}){
+    const font = opts.font || '700 22px "Yu Gothic","Meiryo",sans-serif';
+    const color = opts.color || '#333';
+    const padX = opts.padX ?? 10;
+    const padY = opts.padY ?? 8;
+
+    const mcv = document.createElement('canvas');
+    const mctx = mcv.getContext('2d');
+    mctx.font = font;
+    const metrics = mctx.measureText(text);
+    const w = Math.ceil(metrics.width + padX*2);
+    const h = Math.ceil((metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) + padY*2);
+    mcv.width = w; mcv.height = h;
+
+    const ctx = mcv.getContext('2d');
+    ctx.clearRect(0,0,w,h);
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(text, padX, padY + metrics.actualBoundingBoxAscent);
+
+    return mcv.toDataURL('image/png');
+  }
+
+function formatInt(n){
+    // カンマは表示用だけ（入力はカンマ禁止の仕様を維持）
+    return Number(n).toLocaleString('ja-JP');
+  }
+})();
+</script>
+
+  <!-- コピー手順モーダル -->
+  <div id="copyHelpBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="copyHelpTitle">
+      <div class="modal-header">
+        <h3 id="copyHelpTitle">コピー方法（Excel / PowerPoint へ貼り付け）</h3>
+        <button id="copyHelpClose" class="modal-close" type="button">閉じる</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:8px;">
+          <b>Windows</b>：
+          画像の上で <b>右クリック</b> → <b>「画像をコピー」</b> → Excel/PowerPoint に貼り付け（Ctrl+V）
+        </div>
+        <div>
+          右クリックメニューに <b>「画像をコピー」</b> が出ない場合は：
+          <ul>
+            <li><b>「新しいタブで開く」</b> を押す</li>
+            <li>開いた画像ページで右クリックしてコピー</li>
+          </ul>
+        </div>
+        <div style="margin-top:10px; color:#666; font-size:12px;">
+          ※ iPhone / iPad は「画像を長押し → 共有 → 画像を保存」→（写真から）貼り付け、が確実です。
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // PWA (GitHub Pages) 用: Service Worker 登録
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    });
+  }
+</script>
+</body>
+</html>
