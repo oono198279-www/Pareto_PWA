@@ -596,7 +596,7 @@ const also = document.getElementById('downloadAlso').checked;
     const legendY = pad.t + H + 55;
     const cx = pad.l + W/2;
 
-    // 不良数（赤の四角）
+    // 個数（赤の四角）
     g.fillStyle = '#ff0000';
     g.strokeStyle = '#000';
     g.lineWidth = 2;
@@ -606,9 +606,9 @@ const also = document.getElementById('downloadAlso').checked;
     g.font = '24px sans-serif';
     g.textAlign = 'left';
     g.textBaseline = 'middle';
-    g.fillText('不良数', cx - 90, legendY - 4);
+    g.fillText('個数', cx - 90, legendY - 4);
 
-    // 不良率（黄色の線＋丸）
+    // 累積比率（黄色の線＋丸）
     g.strokeStyle = '#f2b400';
     g.lineWidth = 6;
     g.beginPath();
@@ -622,7 +622,7 @@ const also = document.getElementById('downloadAlso').checked;
     g.fillStyle = '#666';
     g.font = '24px sans-serif';
     g.textAlign = 'left';
-    g.fillText('不良率', cx + 125, legendY - 4);
+    g.fillText('累積比率', cx + 125, legendY - 4);
   }
 
   // 「太字」は環境依存なので、実質はフォントサイズ差で視認性を上げる
