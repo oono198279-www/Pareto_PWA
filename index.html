@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -155,7 +156,10 @@ details.howto > summary { cursor:pointer; font-weight:800; }
     <input type="number" id="th" min="50" max="100" step="1" value="80" /> %<br/><br/>
 
     ダウンロード保存： <label style="font-size:13px;"><input type="checkbox" id="downloadAlso" /> PNGをダウンロードして保存する</label><br/>
-    n表示： <label style="font-size:13px;"><input type="checkbox" id="showNOnChart" checked /> パレート図右上に n=合計個数 を表示する</label><br/><br/>
+    n表示： <label style="font-size:13px;"><input type="checkbox" id="showNOnChart" /> パレート図右上に n=合計個数 を表示する</label><br/><br/>
+    凡例： <label style="font-size:13px;"><input type="checkbox" id="showLegend" /> パレート図の凡例を表示する</label><br/>
+    一覧表背景： <label style="font-size:13px;"><input type="checkbox" id="tableTransparent" /> 一覧表PNGを透過にする（OFFで白背景）</label><br/><br/>
+
     <button id="run">生成</button>
     <div id="msg" class="err"></div>
 </div>
@@ -175,7 +179,7 @@ details.howto > summary { cursor:pointer; font-weight:800; }
       </div>
     </div>
     <div class="previewBox">
-      <h3>一覧表（透過PNG）</h3>
+      <h3>一覧表（PNG）</h3>
       <img id="previewTable" alt="一覧表プレビュー" />
       <div class="previewActions">
         <button class="smallbtn" id="openTable">新しいタブで開く</button>
@@ -291,7 +295,7 @@ openLabelN.onclick = ()=> openInNewTab(previewLabelN.src);
     bd.setAttribute('aria-hidden','true');
   }
   function bindCopyHelp(){
-    const ids = ['copyHintChart','copyHintTable','copyHintLabelN','copyHintLabelThreshold','copyHintLabel100'];
+    const ids = ['copyHintChart','copyHintTable','copyHintLabelN','copyHintLabelThr','copyHintLabel100'];
     ids.forEach(id=>{
       const el = document.getElementById(id);
       if(el){
@@ -368,9 +372,13 @@ run.onclick = () => {
 
       drawParetoQC(chartCv, view, size, { title, total, thresholdPct: th });
       // 一覧表の赤強調もしきい値（累積%）に追従
-      drawTable(tableCv, view, th);
 
-      const chartURL = chartCv.toDataURL('image/png');
+      const tableTransparentEl = document.getElementById('tableTransparent');
+
+      const tableTransparent = tableTransparentEl ? !!tableTransparentEl.checked : false; // 既定：白背景
+
+      drawTable(tableCv, view, th, tableTransparent);
+const chartURL = chartCv.toDataURL('image/png');
       const tableURL = tableCv.toDataURL('image/png');
       previewChart.src = chartURL;
       previewTable.src = tableURL;
@@ -507,7 +515,8 @@ const also = document.getElementById('downloadAlso').checked;
     }
 
     // 右上 n= 合計個数（表示/非表示トグル）
-    const showNOnChart = document.getElementById('showNOnChart')?.checked ?? true;
+    const showNOnChart = document.getElementById('showNOnChart')?.checked ?? false;
+    const showLegend = document.getElementById('showLegend')?.checked ?? false;
     if (showNOnChart) {
       g.fillStyle = '#333';
       g.font = '24px sans-serif';
@@ -592,7 +601,8 @@ const also = document.getElementById('downloadAlso').checked;
       g.fill();
 }
 
-    // 凡例（下中央）
+        if (showLegend) {
+// 凡例（下中央）
     const legendY = pad.t + H + 55;
     const cx = pad.l + W/2;
 
@@ -625,10 +635,13 @@ const also = document.getElementById('downloadAlso').checked;
     g.fillText('累積比率', cx + 125, legendY - 4);
   }
 
-  // 「太字」は環境依存なので、実質はフォントサイズ差で視認性を上げる
+      }
+
+// 「太字」は環境依存なので、実質はフォントサイズ差で視認性を上げる
   function demonstratedFontWeight(_){ return '22px sans-serif'; }
 
-  function drawTable(cv, data, thr){
+  function drawTable(cv, data, thr, transparent){
+    if (transparent === undefined) transparent = false;
     // 透過（clearRect）
     const g = cv.getContext('2d');
   
@@ -680,10 +693,14 @@ const also = document.getElementById('downloadAlso').checked;
     cv.width = tableW;
     cv.height = tableH;
   
-    // 透過背景
-    g.clearRect(0,0,cv.width,cv.height);
-  
-    // 罫線色（薄グレー）
+    // 背景（既定：白。透過指定時のみクリア）
+    if (transparent){
+      g.clearRect(0,0,cv.width,cv.height);
+    } else {
+      g.fillStyle = "#ffffff";
+      g.fillRect(0,0,cv.width,cv.height);
+    }
+// 罫線色（薄グレー）
     const grid = '#cfcfcf';
   
     // --- ヘッダー ---
