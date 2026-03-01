@@ -1,5 +1,5 @@
 // simple offline-first cache for GitHub Pages
-const CACHE_NAME = 'pareto-pwa-v4';
+const CACHE_NAME = 'pareto-pwa-v5';
 const ASSETS = [
   './',
   './index.html',
