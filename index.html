@@ -155,6 +155,9 @@ details.howto > summary { cursor:pointer; font-weight:800; }
     赤強調閾値（累積%）：
     <input type="number" id="th" min="50" max="100" step="1" value="80" /> %<br/><br/>
 
+    線の太さ：
+    <input type="number" id="lineWidth" min="0.5" max="20" step="0.5" value="2" /> px<br/><br/>
+
     ダウンロード保存： <label style="font-size:13px;"><input type="checkbox" id="downloadAlso" /> PNGをダウンロードして保存する</label><br/>
     n表示： <label style="font-size:13px;"><input type="checkbox" id="showNOnChart" /> パレート図右上に n=合計個数 を表示する</label><br/><br/>
     凡例： <label style="font-size:13px;"><input type="checkbox" id="showLegend" /> パレート図の凡例を表示する</label><br/>
@@ -327,10 +330,12 @@ run.onclick = () => {
       const rows = parseInput(input.value);
       const N = parseInt(document.getElementById('nItems').value, 10);
       const th = parseInt(document.getElementById('th').value, 10);
+      const lineWidth = Number(document.getElementById('lineWidth').value);
       const title = document.getElementById('title').value.trim();
 
       if (!Number.isInteger(N) || N < 2) throw '項目数 N が不正です。';
       if (!Number.isFinite(th) || th < 50 || th > 100) throw '赤強調しきい値が不正です（50〜100）。';
+      if (!Number.isFinite(lineWidth) || lineWidth < 0.5 || lineWidth > 20) throw '線の太さが不正です（0.5〜20px）。';
 
       // 検証（縦2列のみ）
       rows.forEach((r,i)=>{
@@ -370,7 +375,7 @@ run.onclick = () => {
       const ratio = document.getElementById('ratio').value;
       const size = ratio === '16:9' ? {w:1920,h:1080} : {w:1600,h:1200};
 
-      drawParetoQC(chartCv, view, size, { title, total, thresholdPct: th });
+      drawParetoQC(chartCv, view, size, { title, total, thresholdPct: th, lineWidth });
       // 一覧表の赤強調もしきい値（累積%）に追従
 
       const tableTransparentEl = document.getElementById('tableTransparent');
@@ -481,6 +486,8 @@ const also = document.getElementById('downloadAlso').checked;
   function drawParetoQC(cv, data, size, meta){
     cv.width=size.w; cv.height=size.h;
     const g=cv.getContext('2d');
+    const lineWidth = meta.lineWidth;
+    const markerRadius = lineWidth * 1.5;
 
     // 背景（白）
     g.fillStyle='#fff';
@@ -495,7 +502,7 @@ const also = document.getElementById('downloadAlso').checked;
     // 横軸ラベル無し（設計どおり）
     // グリッド（水平のみ・薄い灰）
     g.strokeStyle = '#d9d9d9';
-    g.lineWidth = 2;
+    g.lineWidth = lineWidth;
     const gridN = 6; // 0%〜100% っぽい本数
     for (let i=0;i<=gridN;i++){
       const y = pad.t + (H/gridN)*i;
@@ -560,7 +567,7 @@ const also = document.getElementById('downloadAlso').checked;
 
       // 枠線：黒（Excelっぽく）
       g.strokeStyle = '#000';
-      g.lineWidth = 2;
+      g.lineWidth = lineWidth;
       g.strokeRect(x, y, barW, bh);
 
       // 個数ラベル（棒の上）
@@ -571,7 +578,7 @@ const also = document.getElementById('downloadAlso').checked;
 
     // 累積折れ線（黄色・太線・丸）
     g.strokeStyle = '#f2b400';
-    g.lineWidth = 6;
+    g.lineWidth = lineWidth;
     g.lineJoin = 'round';
     g.lineCap = 'round';
 
@@ -597,7 +604,7 @@ const also = document.getElementById('downloadAlso').checked;
       const p = pts[i];
       g.fillStyle = '#f2b400';
       g.beginPath();
-      g.arc(p.x, p.y, 8, 0, Math.PI*2);
+      g.arc(p.x, p.y, markerRadius, 0, Math.PI*2);
       g.fill();
 }
 
@@ -609,7 +616,7 @@ const also = document.getElementById('downloadAlso').checked;
     // 個数（赤の四角）
     g.fillStyle = '#ff0000';
     g.strokeStyle = '#000';
-    g.lineWidth = 2;
+    g.lineWidth = lineWidth;
     g.fillRect(cx - 140, legendY - 14, 40, 20);
     g.strokeRect(cx - 140, legendY - 14, 40, 20);
     g.fillStyle = '#666';
@@ -620,14 +627,14 @@ const also = document.getElementById('downloadAlso').checked;
 
     // 累積比率（黄色の線＋丸）
     g.strokeStyle = '#f2b400';
-    g.lineWidth = 6;
+    g.lineWidth = lineWidth;
     g.beginPath();
     g.moveTo(cx + 40, legendY - 4);
     g.lineTo(cx + 110, legendY - 4);
     g.stroke();
     g.fillStyle = '#f2b400';
     g.beginPath();
-    g.arc(cx + 75, legendY - 4, 8, 0, Math.PI*2);
+    g.arc(cx + 75, legendY - 4, markerRadius, 0, Math.PI*2);
     g.fill();
     g.fillStyle = '#666';
     g.font = '24px sans-serif';
